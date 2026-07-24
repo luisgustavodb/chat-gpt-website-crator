@@ -74,6 +74,7 @@ REGRAS DE RETORNO E FORMATO (EXTREMAMENTE CRÍTICO):
 
 // Helper to extract clean HTML without commentary or markdown code blocks
 function cleanHtmlOutput(raw: string): string {
+  if (!raw) return "";
   let html = raw.trim();
 
   // Extract content inside ```html ... ``` if present
@@ -97,6 +98,23 @@ function cleanHtmlOutput(raw: string): string {
   const closeHtmlIndex = html.search(/<\/html>/i);
   if (closeHtmlIndex !== -1) {
     html = html.substring(0, closeHtmlIndex + 7);
+  }
+
+  // Fallback: If no html wrapper tag exists, wrap the content cleanly
+  if (!html.toLowerCase().includes("<html") && !html.toLowerCase().includes("<!doctype html")) {
+    html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <title>Site Gerado por IA</title>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+  ${html}
+</body>
+</html>`;
   }
 
   return html;

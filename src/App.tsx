@@ -168,7 +168,13 @@ export default function App() {
     }, 600);
 
     try {
-      const authHeaders = await openaiAuthHeaders();
+      let authHeaders = {};
+      try {
+        authHeaders = await openaiAuthHeaders();
+      } catch (e) {
+        console.warn('Cabeçalhos OAuth OpenAI indisponíveis no momento, prosseguindo com requisição padrão:', e);
+      }
+
       const response = await fetch('/api/generate-site', {
         method: 'POST',
         headers: {
@@ -296,7 +302,13 @@ export default function App() {
     );
 
     try {
-      const authHeaders = await openaiAuthHeaders();
+      let authHeaders = {};
+      try {
+        authHeaders = await openaiAuthHeaders();
+      } catch (e) {
+        console.warn('Cabeçalhos OAuth OpenAI indisponíveis no momento:', e);
+      }
+
       const response = await fetch('/api/refine-site', {
         method: 'POST',
         headers: {
