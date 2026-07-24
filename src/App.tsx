@@ -239,10 +239,7 @@ export default function App() {
 
       clearInterval(interval);
 
-      const contentType = response.headers.get('content-type') || '';
-      let rawOutput = '';
-
-      if (!response.ok || contentType.includes('application/json')) {
+      if (!response.ok) {
         const textBody = await response.text();
         let errJson: any = null;
         try {
@@ -251,17 +248,33 @@ export default function App() {
           // textBody is plain text or HTML
         }
 
-        console.error('❌ [Resposta com Erro do Servidor]:', {
+        console.error('❌ [Resposta HTTP com Erro]:', {
           status: response.status,
           statusText: response.statusText,
           body: textBody,
         });
 
-        if (!response.ok) {
-          const errMsg = errJson?.error || (textBody.length < 300 && textBody.trim() ? textBody : `Erro na resposta do servidor (Código HTTP ${response.status}).`);
-          throw new Error(errMsg);
+        let errMsg = errJson?.error;
+        if (!errMsg) {
+          if (response.status === 504) {
+            errMsg = `HTTP 504 Gateway Timeout: A conexão com o servidor de IA expirou (Timeout). O modelo da OpenAI demorou mais que o limite do servidor para gerar a resposta. Recomendamos tentar novamente com o modelo 'gpt-5.4-mini' ou simplificar o pedido.`;
+          } else if (response.status === 502) {
+            errMsg = `HTTP 502 Bad Gateway: O servidor intermediário falhou ao comunicar com a API do ChatGPT. Tente novamente em instantes.`;
+          } else if (response.status === 401) {
+            errMsg = errJson?.error || `HTTP 401 Não Autorizado: Por favor, reconecte sua conta do ChatGPT usando o botão 'Sign in with ChatGPT'.`;
+          } else {
+            errMsg = textBody.length < 300 && textBody.trim() ? textBody : `Erro no servidor (HTTP ${response.status}: ${response.statusText || 'Timeout / Indisponível'}).`;
+          }
         }
-        rawOutput = errJson?.html || textBody;
+        throw new Error(errMsg);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      let rawOutput = '';
+
+      if (contentType.includes('application/json')) {
+        const jsonBody = await response.json();
+        rawOutput = jsonBody.html || '';
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -464,10 +477,7 @@ export default function App() {
         }),
       });
 
-      const contentType = response.headers.get('content-type') || '';
-      let rawOutput = '';
-
-      if (!response.ok || contentType.includes('application/json')) {
+      if (!response.ok) {
         const textBody = await response.text();
         let errJson: any = null;
         try {
@@ -476,17 +486,33 @@ export default function App() {
           // textBody is plain text or HTML
         }
 
-        console.error('❌ [Resposta com Erro no Refinamento]:', {
+        console.error('❌ [Resposta HTTP com Erro no Refinamento]:', {
           status: response.status,
           statusText: response.statusText,
           body: textBody,
         });
 
-        if (!response.ok) {
-          const errMsg = errJson?.error || (textBody.length < 300 && textBody.trim() ? textBody : `Erro no servidor ao refinar (Código HTTP ${response.status}).`);
-          throw new Error(errMsg);
+        let errMsg = errJson?.error;
+        if (!errMsg) {
+          if (response.status === 504) {
+            errMsg = `HTTP 504 Gateway Timeout: A conexão expirou ao refinar o site. O modelo demorou mais que o limite do servidor. Tente simplificar a solicitação de alteração.`;
+          } else if (response.status === 502) {
+            errMsg = `HTTP 502 Bad Gateway: O servidor intermediário falhou ao comunicar com a API do ChatGPT.`;
+          } else if (response.status === 401) {
+            errMsg = errJson?.error || `HTTP 401 Não Autorizado: Por favor, reconecte sua conta do ChatGPT.`;
+          } else {
+            errMsg = textBody.length < 300 && textBody.trim() ? textBody : `Erro no servidor ao refinar (HTTP ${response.status}).`;
+          }
         }
-        rawOutput = errJson?.html || textBody;
+        throw new Error(errMsg);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      let rawOutput = '';
+
+      if (contentType.includes('application/json')) {
+        const jsonBody = await response.json();
+        rawOutput = jsonBody.html || '';
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
