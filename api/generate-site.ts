@@ -1,5 +1,18 @@
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
+import { openaiCredentials } from "@openai-oauth/react/server";
 import { generateText } from "ai";
+
+function getWebHeaders(req: any): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers || {})) {
+    if (typeof value === 'string') {
+      headers.set(key, value);
+    } else if (Array.isArray(value)) {
+      headers.set(key, value.join(', '));
+    }
+  }
+  return headers;
+}
 
 const INSTRUCAO_SISTEMA_CRIAR_SITE = `Você é um desenvolvedor frontend mestre e designer UI/UX de nível mundial.
 Sua tarefa é criar um site COMPLETO, moderno, altamente responsivo, bonito e interativo em um ÚNICO arquivo HTML autônomo baseado no pedido do usuário.
@@ -72,7 +85,9 @@ INSTRUÇÕES DO PEDIDO DO USUÁRIO:
 Gere um site completo, moderno e totalmente funcional em HTML5/Tailwind CSS para o seguinte pedido ou URL: "${query}". Crie uma experiência interativa rica. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto explicativo ou introduções.`;
 
     try {
-      const openai = createOpenAIOAuth(req.headers as any);
+      const webHeaders = getWebHeaders(req);
+      const credentials = openaiCredentials(webHeaders);
+      const openai = createOpenAIOAuth(credentials);
 
       const result = await generateText({
         model: openai('gpt-4o'),

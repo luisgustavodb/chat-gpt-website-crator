@@ -1,5 +1,18 @@
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
+import { openaiCredentials } from "@openai-oauth/react/server";
 import { generateText } from "ai";
+
+function getWebHeaders(req: any): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers || {})) {
+    if (typeof value === 'string') {
+      headers.set(key, value);
+    } else if (Array.isArray(value)) {
+      headers.set(key, value.join(', '));
+    }
+  }
+  return headers;
+}
 
 const INSTRUCAO_SISTEMA_REFINAR_SITE = `Você é um desenvolvedor frontend especialista. O usuário já possui um site gerado em HTML e deseja aplicar uma alteração ou melhoria específica.
 
@@ -58,7 +71,9 @@ SOLICITAÇÃO DE ALTERAÇÃO/MELHORIA DO USUÁRIO:
 "${refinement}"`;
 
     try {
-      const openai = createOpenAIOAuth(req.headers as any);
+      const webHeaders = getWebHeaders(req);
+      const credentials = openaiCredentials(webHeaders);
+      const openai = createOpenAIOAuth(credentials);
 
       const result = await generateText({
         model: openai('gpt-4o'),

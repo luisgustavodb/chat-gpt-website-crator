@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
+import { openaiCredentials } from "@openai-oauth/react/server";
 import { generateText } from "ai";
 import dotenv from "dotenv";
 
@@ -11,6 +12,19 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
+
+// Helper to convert Express headers to Web Headers
+function getWebHeaders(req: express.Request): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (typeof value === "string") {
+      headers.set(key, value);
+    } else if (Array.isArray(value)) {
+      headers.set(key, value.join(", "));
+    }
+  }
+  return headers;
+}
 
 // System instruction for initial site generation
 const GENERATE_SITE_SYSTEM_PROMPT = `
@@ -101,7 +115,9 @@ app.post("/api/generate-site", async (req, res) => {
     const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
 
     try {
-      const openai = createOpenAIOAuth(req.headers as any);
+      const webHeaders = getWebHeaders(req);
+      const credentials = openaiCredentials(webHeaders);
+      const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
         model: openai("gpt-4o"),
         prompt: fullUserPrompt,
@@ -150,7 +166,9 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
     const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
 
     try {
-      const openai = createOpenAIOAuth(req.headers as any);
+      const webHeaders = getWebHeaders(req);
+      const credentials = openaiCredentials(webHeaders);
+      const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
         model: openai("gpt-4o"),
         prompt: fullUserPrompt,
