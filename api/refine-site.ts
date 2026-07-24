@@ -77,7 +77,13 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
     if (!rawOutput) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada no servidor.' });
+        console.warn('GEMINI_API_KEY não encontrada no servidor Vercel para refinamento.');
+        return res.status(200).json({
+          success: true,
+          html: currentCode,
+          warning: 'GEMINI_API_KEY não configurada na Vercel.',
+          updatedAt: new Date().toISOString(),
+        });
       }
 
       const ai = new GoogleGenAI({ apiKey });

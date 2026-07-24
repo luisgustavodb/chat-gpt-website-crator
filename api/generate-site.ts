@@ -88,7 +88,78 @@ export default async function handler(req: any, res: any) {
     if (!rawOutput) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada no servidor.' });
+        console.warn('GEMINI_API_KEY não configurada no ambiente da Vercel. Gerando com motor de template local.');
+        const fallbackHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${query}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col selection:bg-blue-500 selection:text-white">
+  <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg font-bold text-lg">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <span class="font-extrabold text-xl tracking-tight text-white">${query}</span>
+      </div>
+      <button onclick="document.getElementById('modal-demo').classList.remove('hidden')" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg transition-all">
+        Começar Agora
+      </button>
+    </div>
+  </header>
+  <section class="relative py-24 px-6 flex-1 flex items-center justify-center text-center">
+    <div class="max-w-3xl mx-auto space-y-6">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
+        <i class="fa-solid fa-sparkles"></i>
+        <span>Plataforma Gerada para "${query}"</span>
+      </div>
+      <h1 class="text-4xl md:text-6xl font-black text-white leading-tight">
+        Bem-vindo ao site de <span class="text-blue-400">${query}</span>
+      </h1>
+      <p class="text-slate-400 text-base max-w-xl mx-auto">
+        Site gerado com sucesso! Para habilitar o modelo de inteligência artificial Gemini 3.6 Flash em tempo real na Vercel, adicione a chave GEMINI_API_KEY nas variáveis de ambiente do seu projeto.
+      </p>
+      <div class="pt-4 flex justify-center gap-4">
+        <button onclick="document.getElementById('modal-demo').classList.remove('hidden')" class="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg">
+          Explorar
+        </button>
+      </div>
+    </div>
+  </section>
+  <div id="modal-demo" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+      <button onclick="document.getElementById('modal-demo').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+      <h3 class="text-xl font-bold text-white">Acessar ${query}</h3>
+      <p class="text-xs text-slate-400">Digite seu e-mail para continuar.</p>
+      <input type="email" placeholder="seu.email@exemplo.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white" />
+      <button onclick="alert('Cadastro realizado!'); document.getElementById('modal-demo').classList.add('hidden');" class="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs">
+        Confirmar
+      </button>
+    </div>
+  </div>
+  <footer class="py-6 border-t border-slate-800 text-center text-xs text-slate-500">
+    © ${new Date().getFullYear()} ${query}. Todos os direitos reservados.
+  </footer>
+</body>
+</html>`;
+        return res.status(200).json({
+          success: true,
+          query,
+          html: fallbackHtml,
+          warning: 'GEMINI_API_KEY não configurada na Vercel.',
+          generatedAt: new Date().toISOString(),
+        });
       }
 
       const ai = new GoogleGenAI({ apiKey });
