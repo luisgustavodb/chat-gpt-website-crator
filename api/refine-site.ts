@@ -76,7 +76,7 @@ SOLICITAÇÃO DE ALTERAÇÃO/MELHORIA DO USUÁRIO:
       const openai = createOpenAIOAuth(credentials);
 
       const result = await generateText({
-        model: openai('gpt-4o'),
+        model: openai('gpt-5.4-mini'),
         prompt: fullPrompt,
       });
 

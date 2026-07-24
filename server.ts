@@ -119,7 +119,7 @@ app.post("/api/generate-site", async (req, res) => {
       const credentials = openaiCredentials(webHeaders);
       const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
-        model: openai("gpt-4o"),
+        model: openai("gpt-5.4-mini"),
         prompt: fullUserPrompt,
       });
 
@@ -170,7 +170,7 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
       const credentials = openaiCredentials(webHeaders);
       const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
-        model: openai("gpt-4o"),
+        model: openai("gpt-5.4-mini"),
         prompt: fullUserPrompt,
       });
 
