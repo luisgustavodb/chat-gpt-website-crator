@@ -184,13 +184,21 @@ export default function App() {
 
       clearInterval(interval);
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Falha ao gerar site');
+      const contentType = response.headers.get('content-type');
+      let data: any = {};
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const rawText = await response.text();
+        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
       }
 
-      const data = await response.json();
-      const generatedHtml = data.html;
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha ao gerar o site.');
+      }
+
+      const generatedHtml = data.html || '';
 
       // Extract a clean title from HTML <title> tag if available
       let siteTitle = query;
@@ -302,12 +310,19 @@ export default function App() {
         }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Falha ao refinar site');
+      const contentType = response.headers.get('content-type');
+      let data: any = {};
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const rawText = await response.text();
+        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha ao refinar o site.');
+      }
 
       setTabs((prev) =>
         prev.map((t) =>
