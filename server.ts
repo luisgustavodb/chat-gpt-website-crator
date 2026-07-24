@@ -132,23 +132,23 @@ app.post("/api/generate-site", async (req, res) => {
 
     let rawOutput = "";
 
-    // If ChatGPT / OpenAI OAuth is requested and headers are present
+    // If ChatGPT / OpenAI OAuth is requested
     if (useChatGPT) {
       try {
         const openai = createOpenAIOAuth(req.headers as any);
-        const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO:\nGere um site completo e funcional em HTML5 para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem saudações ou texto antes/depois.`;
+        const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
         
         const result = await generateText({
           model: openai("gpt-4o"),
           prompt: fullUserPrompt,
         });
         rawOutput = result.text || "";
-      } catch (oauthErr) {
-        console.warn("OAuth ChatGPT indisponível ou não autenticado, usando Gemini 3.6 Flash como fallback:", oauthErr);
+      } catch (oauthErr: any) {
+        console.warn("ChatGPT OAuth falhou. Tentando Gemini 3.6 Flash...", oauthErr?.message);
       }
     }
 
-    // Fallback to Gemini if ChatGPT was not used or didn't return text
+    // Call Gemini 3.6 Flash if ChatGPT was not selected or failed
     if (!rawOutput) {
       const ai = getGeminiClient();
       const response = await ai.models.generateContent({

@@ -5,7 +5,6 @@ import { BrowserViewport } from './components/BrowserViewport';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { ChatGPTAuthModal } from './components/ChatGPTAuthModal';
 import { SAMPLE_NOVA_AI_HTML } from './data/sampleSites';
-import { generateFallbackSite } from './utils/fallbackGenerator';
 import { openaiAuthHeaders } from '@openai-oauth/react';
 
 export default function App() {
@@ -192,20 +191,20 @@ export default function App() {
       clearInterval(interval);
 
       const contentType = response.headers.get('content-type');
-      let generatedHtml = '';
+      let data: any = {};
 
       if (contentType && contentType.includes('application/json')) {
-        const data = await response.json();
-        if (response.ok && data.html) {
-          generatedHtml = data.html;
-        } else {
-          console.warn('API respondeu com erro, ativando gerador fallback:', data.error);
-          generatedHtml = generateFallbackSite(query, formattedUrl);
-        }
+        data = await response.json();
       } else {
-        console.warn('Servidor respondeu sem JSON (ex: 404 estático), gerando site no cliente...');
-        generatedHtml = generateFallbackSite(query, formattedUrl);
+        const rawText = await response.text();
+        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
       }
+
+      if (!response.ok || !data.html) {
+        throw new Error(data.error || 'Falha ao gerar o site pela IA.');
+      }
+
+      const generatedHtml = data.html;
 
       // Extract a clean title from HTML <title> tag if available
       let siteTitle = query;
@@ -256,9 +255,34 @@ export default function App() {
       setHistoryList((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
     } catch (error: any) {
       clearInterval(interval);
-      console.error('Erro ao conectar à API de geração, gerando com motor local:', error);
+      console.error('Erro ao conectar à API de geração de IA:', error);
 
-      const generatedHtml = generateFallbackSite(query, formattedUrl);
+      const errorHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Erro de Conexão com IA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-6">
+  <div class="max-w-md w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+    <div class="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+    </div>
+    <h2 class="text-xl font-bold text-white">Falha ao Gerar com a IA</h2>
+    <p class="text-xs text-slate-400 leading-relaxed">
+      ${error.message || 'Não foi possível se comunicar com o modelo de IA.'}
+    </p>
+    <div class="pt-2 flex flex-col gap-2">
+      <button onclick="window.location.reload()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all">
+        Tentar Novamente
+      </button>
+    </div>
+  </div>
+</body>
+</html>`;
 
       setTabs((prev) =>
         prev.map((t) =>
@@ -266,8 +290,8 @@ export default function App() {
             ? {
                 ...t,
                 isLoading: false,
-                htmlCode: generatedHtml,
-                loadingStatus: 'Pronto',
+                htmlCode: errorHtml,
+                loadingStatus: 'Erro',
               }
             : t
         )
