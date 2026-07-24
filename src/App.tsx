@@ -5,6 +5,7 @@ import { BrowserViewport } from './components/BrowserViewport';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { ChatGPTAuthModal } from './components/ChatGPTAuthModal';
 import { SAMPLE_NOVA_AI_HTML } from './data/sampleSites';
+import { generateFallbackSite } from './utils/fallbackGenerator';
 import { openaiAuthHeaders } from '@openai-oauth/react';
 
 export default function App() {
@@ -191,20 +192,20 @@ export default function App() {
       clearInterval(interval);
 
       const contentType = response.headers.get('content-type');
-      let data: any = {};
+      let generatedHtml = '';
 
       if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+        const data = await response.json();
+        if (response.ok && data.html) {
+          generatedHtml = data.html;
+        } else {
+          console.warn('API respondeu com erro, ativando gerador fallback:', data.error);
+          generatedHtml = generateFallbackSite(query, formattedUrl);
+        }
       } else {
-        const rawText = await response.text();
-        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
+        console.warn('Servidor respondeu sem JSON (ex: 404 estático), gerando site no cliente...');
+        generatedHtml = generateFallbackSite(query, formattedUrl);
       }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Falha ao gerar o site.');
-      }
-
-      const generatedHtml = data.html || '';
 
       // Extract a clean title from HTML <title> tag if available
       let siteTitle = query;
@@ -255,18 +256,9 @@ export default function App() {
       setHistoryList((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
     } catch (error: any) {
       clearInterval(interval);
-      console.error('Erro ao gerar site:', error);
+      console.error('Erro ao conectar à API de geração, gerando com motor local:', error);
 
-      // Fallback error screen HTML
-      const errorHtml = `
-        <div style="font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #ffffff; color: #0f172a; text-align: center; padding: 2rem;">
-          <h2 style="color: #e11d48; font-size: 1.5rem; margin-bottom: 0.5rem; font-weight: 800;">Erro na Geração do Site</h2>
-          <p style="color: #64748b; font-size: 0.9rem; max-width: 500px; margin: 0 auto 1.5rem auto;">
-            ${error.message || 'Não foi possível gerar o site no momento.'}
-          </p>
-          <button onclick="window.location.reload()" style="background: #2563eb; color: #fff; border: none; padding: 0.75rem 1.5rem; border-radius: 9999px; cursor: pointer; font-weight: bold; font-size: 0.85rem;">Tentar Novamente</button>
-        </div>
-      `;
+      const generatedHtml = generateFallbackSite(query, formattedUrl);
 
       setTabs((prev) =>
         prev.map((t) =>
@@ -274,8 +266,8 @@ export default function App() {
             ? {
                 ...t,
                 isLoading: false,
-                htmlCode: errorHtml,
-                loadingStatus: 'Erro',
+                htmlCode: generatedHtml,
+                loadingStatus: 'Pronto',
               }
             : t
         )
