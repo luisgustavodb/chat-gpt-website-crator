@@ -2,6 +2,11 @@ import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
 import { openaiCredentials } from "@openai-oauth/react/server";
 import { generateText } from "ai";
 
+export const maxDuration = 60;
+export const config = {
+  maxDuration: 60,
+};
+
 function getWebHeaders(req: any): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers || {})) {
