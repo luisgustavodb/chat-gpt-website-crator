@@ -15,6 +15,7 @@ export interface Tab {
   prompt: string;
   htmlCode: string;
   isLoading: boolean;
+  isStreaming?: boolean;
   loadingProgress: number;
   loadingStatus: string;
   deviceMode: DeviceMode;

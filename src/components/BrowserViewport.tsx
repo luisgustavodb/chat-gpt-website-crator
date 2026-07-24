@@ -62,8 +62,8 @@ export const BrowserViewport: React.FC<BrowserViewportProps> = ({
 
   return (
     <div className="flex-1 bg-slate-100 flex flex-col relative overflow-hidden">
-      {/* Loading Screen Overlay */}
-      {tab.isLoading ? (
+      {/* Loading Screen Overlay (Only before initial HTML begins streaming) */}
+      {tab.isLoading && !tab.htmlCode ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white/95 backdrop-blur-md relative z-20">
           <div className="relative mb-6">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-500 via-indigo-500 to-purple-500 p-0.5 shadow-xl shadow-blue-500/20 animate-pulse">
@@ -78,7 +78,7 @@ export const BrowserViewport: React.FC<BrowserViewportProps> = ({
           </h3>
 
           <p className="text-xs text-blue-700 font-medium mb-6 max-w-md bg-blue-50 px-4 py-2 rounded-xl border border-blue-200">
-            {tab.loadingStatus || 'Analisando o pedido e gerando o código HTML/Tailwind...'}
+            {tab.loadingStatus || 'Conectando ao ChatGPT e preparando a geração...'}
           </p>
 
           {/* Progress Bar */}
@@ -104,6 +104,16 @@ export const BrowserViewport: React.FC<BrowserViewportProps> = ({
       ) : (
         /* Viewport Main Container */
         <div className="flex-1 flex overflow-hidden relative">
+          {/* Live Streaming Indicator Badge */}
+          {tab.isStreaming && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 text-white backdrop-blur-md border border-slate-700 rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-2 text-xs font-semibold animate-pulse">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
+              <span>Gerando site em tempo real via ChatGPT...</span>
+              <span className="text-[10px] text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-700 font-mono font-bold tracking-wider">
+                AO VIVO
+              </span>
+            </div>
+          )}
           {/* View Mode: Split or Code Only */}
           {(tab.viewMode === 'code' || tab.viewMode === 'split') && (
             <div

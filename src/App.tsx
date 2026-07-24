@@ -253,11 +253,38 @@ export default function App() {
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let chunkCount = 0;
+
+        console.log(`[ChatGPT API] Resposta recebida! Iniciando leitura da transmissão em tempo real para a aba ${tabId}...`);
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          rawOutput += decoder.decode(value, { stream: true });
+          const chunk = decoder.decode(value, { stream: true });
+          rawOutput += chunk;
+          chunkCount++;
+
+          console.log(`[ChatGPT Stream Chunk #${chunkCount}]:`, chunk);
+          console.log(`[ChatGPT HTML Acumulado (${rawOutput.length} caracteres)]:`, rawOutput);
+
+          const liveHtml = cleanHtmlOutput(rawOutput);
+
+          // Render live preview and update state chunk by chunk
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === tabId
+                ? {
+                    ...t,
+                    htmlCode: liveHtml,
+                    isLoading: false,
+                    isStreaming: true,
+                    loadingStatus: `Gerando em tempo real (${rawOutput.length} caracteres)...`,
+                  }
+                : t
+            )
+          );
         }
+        console.log(`[ChatGPT Stream] Finalizado! Total de chunks: ${chunkCount}, tamanho do HTML: ${rawOutput.length} caracteres.`);
       } else {
         rawOutput = await response.text();
       }
@@ -295,6 +322,7 @@ export default function App() {
             prompt: query,
             htmlCode: generatedHtml,
             isLoading: false,
+            isStreaming: false,
             loadingProgress: 100,
             loadingStatus: 'Pronto',
             history: updatedHistory,
@@ -418,11 +446,37 @@ export default function App() {
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let chunkCount = 0;
+
+        console.log(`[ChatGPT Refinement API] Resposta recebida! Iniciando leitura em tempo real para refinamento da aba ${tabId}...`);
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          rawOutput += decoder.decode(value, { stream: true });
+          const chunk = decoder.decode(value, { stream: true });
+          rawOutput += chunk;
+          chunkCount++;
+
+          console.log(`[ChatGPT Refinement Chunk #${chunkCount}]:`, chunk);
+          console.log(`[ChatGPT Refinement Acumulado (${rawOutput.length} caracteres)]:`, rawOutput);
+
+          const liveHtml = cleanHtmlOutput(rawOutput);
+
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === tabId
+                ? {
+                    ...t,
+                    htmlCode: liveHtml,
+                    isLoading: false,
+                    isStreaming: true,
+                    loadingStatus: `Refinando em tempo real (${rawOutput.length} caracteres)...`,
+                  }
+                : t
+            )
+          );
         }
+        console.log(`[ChatGPT Refinement] Stream finalizado! Total de chunks: ${chunkCount}, tamanho do HTML: ${rawOutput.length} caracteres.`);
       } else {
         rawOutput = await response.text();
       }
@@ -439,6 +493,7 @@ export default function App() {
                 ...t,
                 htmlCode: updatedHtml,
                 isLoading: false,
+                isStreaming: false,
                 loadingProgress: 100,
                 loadingStatus: 'Refinado com sucesso',
               }
