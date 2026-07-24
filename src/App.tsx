@@ -11,9 +11,13 @@ function cleanHtmlOutput(raw: string): string {
   if (!raw) return '';
   let html = raw.trim();
 
+  // If closed codeblock exists, extract content
   const codeBlockMatch = html.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
   if (codeBlockMatch && codeBlockMatch[1]) {
     html = codeBlockMatch[1].trim();
+  } else {
+    // Strips unclosed opening backticks during live streaming
+    html = html.replace(/^```(?:html)?\s*/i, '');
   }
 
   const doctypeIndex = html.search(/<!DOCTYPE\s+html/i);
