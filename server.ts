@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
 import { generateText } from "ai";
 import dotenv from "dotenv";
@@ -13,22 +12,6 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
-// Initialize Gemini Client
-const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY não configurada nos segredos.");
-  }
-  return new GoogleGenAI({
-    apiKey: apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
-    },
-  });
-};
-
 // System instruction for initial site generation
 const GENERATE_SITE_SYSTEM_PROMPT = `
 Você é um desenvolvedor frontend mestre e designer UI/UX de nível mundial.
@@ -36,30 +19,15 @@ Sua tarefa é criar um site COMPLETO, moderno, altamente responsivo, bonito e in
 
 REGRAS DE RETORNO E FORMATO (EXTREMAMENTE CRÍTICO):
 1. Retorne ESTRITAMENTE E EXCLUSIVAMENTE o código HTML completo da página.
-2. NUNCA adicione saudações, introduções, comentários explicativos, notas, frases de efeito ou conversas (ex: NÃO escreva "Aqui está seu site", "Espero que goste", "Com certeza!", etc).
-3. O resultado deve conter APENAS o código HTML puro (pode estar envolvido em bloco \`\`\`html ... \`\`\`), começando com <!DOCTYPE html> e terminando com </html>.
+2. NUNCA adicione saudações, introduções, comentários explicativos, notas, frases de efeito ou conversas.
+3. O resultado deve conter APENAS o código HTML puro, começando com <!DOCTYPE html> e terminando com </html>.
 
 REGRAS DE DESIGN E ESTRUTURA:
 - Inclua o CDN do Tailwind CSS no head: <script src="https://cdn.tailwindcss.com"></script>
 - Inclua ícones do FontAwesome 6 CDN: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 - Inclua Google Fonts no head ('Plus Jakarta Sans', 'Inter', 'Outfit', etc.).
-- Design extremamente rico e sofisticado:
-   * Navbar fixa e responsiva com logo e menu.
-   * Hero section impactante com call-to-action e imagens.
-   * Recursos/Features com cards interativos.
-   * Depoimentos/Social Proof com avatares.
-   * Tabela de Preços com toggle mensal/anual se aplicável.
-   * Seção de Perguntas Frequentes (FAQ) sanfonada/accordion funcional.
-   * Formulário de contato com validação e toast de sucesso em JS.
-   * Footer rico com links e redes sociais.
-- Use imagens de alta qualidade do Unsplash relevantes (ex: https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80, etc).
-- ADICIONE JAVASCRIPT INTERATIVO REAL:
-   * Toggle de Tema Claro/Escuro funcional.
-   * Modais funcionais (ex: clique em "Começar Agora" abre modal).
-   * Menu mobile hambúrguer funcional.
-   * FAQ sanfonado (accordion) que expande/recolhe ao clicar.
-   * Toasts/notificações no JS quando o usuário interage.
-- Se o usuário digitar uma URL (ex: stripe.com, apple.com, github.com), recrie uma versão espetacular e moderna inspirada nesse serviço.
+- Design extremamente rico e sofisticado com Navbar, Hero, Recursos, Depoimentos, Preços, FAQ e Footer.
+- ADICIONE JAVASCRIPT INTERATIVO REAL (Toggle de Tema, Modais, Accordions, Toasts).
 `;
 
 // System instruction for refining an existing site
@@ -120,56 +88,40 @@ function cleanHtmlOutput(raw: string): string {
   return html;
 }
 
-// API endpoint to generate a site
+// API endpoint to generate a site EXCLUSIVELY via ChatGPT
 app.post("/api/generate-site", async (req, res) => {
   try {
-    const { prompt, url, useChatGPT } = req.body;
+    const { prompt, url } = req.body;
     const query = prompt || url;
 
     if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({ error: "O parâmetro de busca ou prompt é obrigatório." });
     }
 
-    let rawOutput = "";
+    const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
 
-    // If ChatGPT / OpenAI OAuth is requested
-    if (useChatGPT) {
-      try {
-        const openai = createOpenAIOAuth(req.headers as any);
-        const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
-        
-        const result = await generateText({
-          model: openai("gpt-4o"),
-          prompt: fullUserPrompt,
-        });
-        rawOutput = result.text || "";
-      } catch (oauthErr: any) {
-        console.warn("ChatGPT OAuth falhou. Tentando Gemini 3.6 Flash...", oauthErr?.message);
-      }
-    }
-
-    // Call Gemini 3.6 Flash if ChatGPT was not selected or failed
-    if (!rawOutput) {
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: `${GENERATE_SITE_SYSTEM_PROMPT}\n\nSOLICITAÇÃO DO USUÁRIO:\nGere um site completo e funcional para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS. Retorne APENAS o código HTML.`,
-        config: {
-          systemInstruction: GENERATE_SITE_SYSTEM_PROMPT,
-          temperature: 0.7,
-        },
+    try {
+      const openai = createOpenAIOAuth(req.headers as any);
+      const result = await generateText({
+        model: openai("gpt-4o"),
+        prompt: fullUserPrompt,
       });
-      rawOutput = response.text || "";
+
+      const rawOutput = result.text || "";
+      const htmlCode = cleanHtmlOutput(rawOutput);
+
+      res.json({
+        success: true,
+        query,
+        html: htmlCode,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (chatGptErr: any) {
+      console.error("Erro no ChatGPT / OpenAI OAuth:", chatGptErr);
+      return res.status(401).json({
+        error: "Autenticação do ChatGPT necessária. Por favor, conecte sua conta do ChatGPT clicando no botão 'Sign in with ChatGPT'. " + (chatGptErr?.message || ""),
+      });
     }
-
-    const htmlCode = cleanHtmlOutput(rawOutput);
-
-    res.json({
-      success: true,
-      query,
-      html: htmlCode,
-      generatedAt: new Date().toISOString(),
-    });
   } catch (error: any) {
     console.error("Erro ao gerar site:", error);
     res.status(500).json({
@@ -178,10 +130,10 @@ app.post("/api/generate-site", async (req, res) => {
   }
 });
 
-// API endpoint to refine an existing site
+// API endpoint to refine an existing site EXCLUSIVELY via ChatGPT
 app.post("/api/refine-site", async (req, res) => {
   try {
-    const { currentCode, refinement, useChatGPT } = req.body;
+    const { currentCode, refinement } = req.body;
 
     if (!currentCode || !refinement) {
       return res.status(400).json({ error: "Código atual e refinamento são obrigatórios." });
@@ -195,42 +147,29 @@ ${currentCode}
 SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
 "${refinement}"`;
 
-    let rawOutput = "";
+    const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
 
-    if (useChatGPT) {
-      try {
-        const openai = createOpenAIOAuth(req.headers as any);
-        const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
-        const result = await generateText({
-          model: openai("gpt-4o"),
-          prompt: fullUserPrompt,
-        });
-        rawOutput = result.text || "";
-      } catch (oauthErr) {
-        console.warn("OAuth ChatGPT refinamento fallback para Gemini:", oauthErr);
-      }
-    }
-
-    if (!rawOutput) {
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: userContent,
-        config: {
-          systemInstruction: REFINE_SITE_SYSTEM_PROMPT,
-          temperature: 0.7,
-        },
+    try {
+      const openai = createOpenAIOAuth(req.headers as any);
+      const result = await generateText({
+        model: openai("gpt-4o"),
+        prompt: fullUserPrompt,
       });
-      rawOutput = response.text || "";
+
+      const rawOutput = result.text || "";
+      const htmlCode = cleanHtmlOutput(rawOutput);
+
+      res.json({
+        success: true,
+        html: htmlCode,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (chatGptErr: any) {
+      console.error("Erro no ChatGPT / OpenAI OAuth no refinamento:", chatGptErr);
+      return res.status(401).json({
+        error: "Autenticação do ChatGPT necessária. Por favor, conecte sua conta do ChatGPT clicando no botão 'Sign in with ChatGPT'. " + (chatGptErr?.message || ""),
+      });
     }
-
-    const htmlCode = cleanHtmlOutput(rawOutput);
-
-    res.json({
-      success: true,
-      html: htmlCode,
-      updatedAt: new Date().toISOString(),
-    });
   } catch (error: any) {
     console.error("Erro ao refinamento do site:", error);
     res.status(500).json({

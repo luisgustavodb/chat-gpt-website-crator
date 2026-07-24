@@ -9,7 +9,7 @@ import { openaiAuthHeaders } from '@openai-oauth/react';
 
 export default function App() {
   // Toggle for OpenAI OAuth / ChatGPT Mode & Auth Modal
-  const [isOpenAiAuthEnabled, setIsOpenAiAuthEnabled] = useState<boolean>(false);
+  const [isOpenAiAuthEnabled, setIsOpenAiAuthEnabled] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Initialize state with default tab or blank tab

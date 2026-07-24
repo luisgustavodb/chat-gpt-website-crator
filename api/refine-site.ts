@@ -1,15 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
 import { generateText } from "ai";
 
-const REFINE_SITE_SYSTEM_PROMPT = `
-Você é um desenvolvedor frontend especialista. O usuário já tem um site gerado em HTML e deseja aplicar uma alteração ou melhoria específica.
+const INSTRUCAO_SISTEMA_REFINAR_SITE = `Você é um desenvolvedor frontend especialista. O usuário já possui um site gerado em HTML e deseja aplicar uma alteração ou melhoria específica.
 
 REGRAS DE RETORNO E FORMATO (EXTREMAMENTE CRÍTICO):
 1. Retorne ESTRITAMENTE E EXCLUSIVAMENTE o código HTML atualizado completo da página.
 2. NUNCA adicione saudações, explicações, notas ou conversas antes ou depois do código.
-3. Comece exatamente com <!DOCTYPE html> e termine com </html>.
-`;
+3. Comece exatamente com <!DOCTYPE html> e termine com </html>.`;
 
 function cleanHtmlOutput(raw: string): string {
   if (!raw) return "";
@@ -44,61 +41,44 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { currentCode, refinement, useChatGPT } = req.body || {};
+    const { currentCode, refinement } = req.body || {};
 
     if (!currentCode || !refinement) {
       return res.status(400).json({ error: 'Código atual e refinamento são obrigatórios.' });
     }
 
-    const userContent = `CÓDIGO HTML ATUAL:
+    const fullPrompt = `${INSTRUCAO_SISTEMA_REFINAR_SITE}
+
+CÓDIGO HTML ATUAL DO SITE:
 \`\`\`html
 ${currentCode}
 \`\`\`
 
-SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
+SOLICITAÇÃO DE ALTERAÇÃO/MELHORIA DO USUÁRIO:
 "${refinement}"`;
 
-    let rawOutput = '';
+    try {
+      const openai = createOpenAIOAuth(req.headers as any);
 
-    if (useChatGPT) {
-      try {
-        const openai = createOpenAIOAuth(req.headers as any);
-        const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
-        const result = await generateText({
-          model: openai('gpt-4o'),
-          prompt: fullUserPrompt,
-        });
-        rawOutput = result.text || '';
-      } catch (oauthErr) {
-        console.warn('OAuth ChatGPT refinamento fallback para Gemini:', oauthErr);
-      }
-    }
-
-    if (!rawOutput) {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY não configurada no servidor.' });
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: userContent,
-        config: {
-          systemInstruction: REFINE_SITE_SYSTEM_PROMPT,
-          temperature: 0.7,
-        },
+      const result = await generateText({
+        model: openai('gpt-4o'),
+        prompt: fullPrompt,
       });
-      rawOutput = response.text || '';
+
+      const rawOutput = result.text || '';
+      const htmlCode = cleanHtmlOutput(rawOutput);
+
+      return res.status(200).json({
+        success: true,
+        html: htmlCode,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (chatGptError: any) {
+      console.error('Erro de autenticação/geração no ChatGPT ao refinar:', chatGptError);
+      return res.status(401).json({
+        error: 'Autenticação do ChatGPT necessária. Conecte sua conta do ChatGPT usando o botão "Sign in with ChatGPT". ' + (chatGptError?.message || ''),
+      });
     }
-
-    const htmlCode = cleanHtmlOutput(rawOutput);
-
-    return res.status(200).json({
-      success: true,
-      html: htmlCode,
-      updatedAt: new Date().toISOString(),
-    });
   } catch (error: any) {
     console.error('Erro na Vercel API handler refine-site:', error);
     return res.status(500).json({
