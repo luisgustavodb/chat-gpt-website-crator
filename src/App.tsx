@@ -243,54 +243,72 @@ export default function App() {
       let rawOutput = '';
 
       if (!response.ok || contentType.includes('application/json')) {
-        let errJson: any = {};
+        const textBody = await response.text();
+        let errJson: any = null;
         try {
-          errJson = await response.json();
+          errJson = JSON.parse(textBody);
         } catch (_) {
-          const textErr = await response.text();
-          throw new Error(textErr || 'Erro ao conectar à API de geração.');
+          // textBody is plain text or HTML
         }
-        if (!response.ok || errJson.error) {
-          throw new Error(errJson.error || 'Falha ao gerar o site pela IA.');
+
+        console.error('❌ [Resposta com Erro do Servidor]:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: textBody,
+        });
+
+        if (!response.ok) {
+          const errMsg = errJson?.error || (textBody.length < 300 && textBody.trim() ? textBody : `Erro na resposta do servidor (Código HTTP ${response.status}).`);
+          throw new Error(errMsg);
         }
-        rawOutput = errJson.html || '';
+        rawOutput = errJson?.html || textBody;
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let chunkCount = 0;
 
-        console.log(`[ChatGPT API] Resposta recebida! Iniciando leitura da transmissão em tempo real para a aba ${tabId}...`);
+        console.log(`🚀 [ChatGPT API] Conexão iniciada! Transmitindo resposta em tempo real para a aba ${tabId}...`);
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          rawOutput += chunk;
-          chunkCount++;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            rawOutput += chunk;
+            chunkCount++;
 
-          console.log(`[ChatGPT Stream Chunk #${chunkCount}]:`, chunk);
-          console.log(`[ChatGPT HTML Acumulado (${rawOutput.length} caracteres)]:`, rawOutput);
+            console.log(`📦 [Chunk #${chunkCount}]:`, chunk);
+            console.log(`📄 [HTML Acumulado (${rawOutput.length} chars)]`);
 
-          const liveHtml = cleanHtmlOutput(rawOutput);
+            const liveHtml = cleanHtmlOutput(rawOutput);
 
-          // Render live preview and update state chunk by chunk
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.id === tabId
-                ? {
-                    ...t,
-                    htmlCode: liveHtml,
-                    isLoading: false,
-                    isStreaming: true,
-                    loadingStatus: `Gerando em tempo real (${rawOutput.length} caracteres)...`,
-                  }
-                : t
-            )
-          );
+            // Render live preview chunk by chunk
+            setTabs((prev) =>
+              prev.map((t) =>
+                t.id === tabId
+                  ? {
+                      ...t,
+                      htmlCode: liveHtml,
+                      isLoading: false,
+                      isStreaming: true,
+                      loadingStatus: `Gerando em tempo real (${rawOutput.length} caracteres)...`,
+                    }
+                  : t
+              )
+            );
+          }
+          console.log(`✅ [ChatGPT Stream Concluído] Chunks: ${chunkCount}, Total: ${rawOutput.length} caracteres.`);
+          console.log(`🔥 [Código HTML Final Gerado]:\n`, rawOutput);
+        } catch (streamReadErr: any) {
+          console.error('⚠️ [Erro ao ler transmissão]:', streamReadErr);
+          if (!rawOutput) {
+            throw streamReadErr;
+          }
+          console.warn('⚠️ [Stream Interrompida] Mantendo o HTML visual gerado parcialmente.');
         }
-        console.log(`[ChatGPT Stream] Finalizado! Total de chunks: ${chunkCount}, tamanho do HTML: ${rawOutput.length} caracteres.`);
       } else {
         rawOutput = await response.text();
+        console.log(`📄 [Resposta Texto Direta]:\n`, rawOutput);
       }
 
       const generatedHtml = cleanHtmlOutput(rawOutput);
@@ -348,9 +366,23 @@ export default function App() {
       setHistoryList((prev) => [newHistoryItem, ...prev.slice(0, 49)]);
     } catch (error: any) {
       clearInterval(interval);
-      console.error('Erro ao conectar à API de geração de IA:', error);
+      console.error('❌ [Erro ao conectar à API de geração de IA]:', error);
 
-      const errorHtml = `<!DOCTYPE html>
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id !== tabId) return t;
+
+          // Keep partial HTML if it was already stream-rendered
+          if (t.htmlCode && t.htmlCode.length > 50) {
+            return {
+              ...t,
+              isLoading: false,
+              isStreaming: false,
+              loadingStatus: `Aviso: ${error.message || 'Stream interrompida'}`,
+            };
+          }
+
+          const errorHtml = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -359,17 +391,20 @@ export default function App() {
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-6">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-6 font-sans">
   <div class="max-w-md w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
     <div class="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl">
       <i class="fa-solid fa-triangle-exclamation"></i>
     </div>
-    <h2 class="text-xl font-bold text-white">Falha ao Gerar com a IA</h2>
-    <p class="text-xs text-slate-400 leading-relaxed">
-      ${error.message || 'Não foi possível se comunicar com o modelo de IA.'}
+    <h2 class="text-xl font-bold text-white">Falha ao Conectar com a IA</h2>
+    <div class="text-xs text-rose-300 font-mono bg-slate-950 p-3.5 rounded-xl border border-slate-700 text-left overflow-x-auto leading-relaxed max-h-48">
+      ${error.message || 'Erro de comunicação com o servidor de IA.'}
+    </div>
+    <p class="text-[11px] text-slate-400">
+      Verifique o Console do Navegador (F12) para inspecionar os detalhes da conexão e o log da IA.
     </p>
     <div class="pt-2 flex flex-col gap-2">
-      <button onclick="window.location.reload()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all">
+      <button onclick="window.location.reload()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all shadow-lg shadow-blue-500/20">
         Tentar Novamente
       </button>
     </div>
@@ -377,17 +412,14 @@ export default function App() {
 </body>
 </html>`;
 
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === tabId
-            ? {
-                ...t,
-                isLoading: false,
-                htmlCode: errorHtml,
-                loadingStatus: 'Erro',
-              }
-            : t
-        )
+          return {
+            ...t,
+            isLoading: false,
+            isStreaming: false,
+            htmlCode: errorHtml,
+            loadingStatus: 'Erro',
+          };
+        })
       );
     }
   };
@@ -436,53 +468,69 @@ export default function App() {
       let rawOutput = '';
 
       if (!response.ok || contentType.includes('application/json')) {
-        let errJson: any = {};
+        const textBody = await response.text();
+        let errJson: any = null;
         try {
-          errJson = await response.json();
+          errJson = JSON.parse(textBody);
         } catch (_) {
-          const textErr = await response.text();
-          throw new Error(textErr || 'Erro ao conectar à API de refinamento.');
+          // textBody is plain text or HTML
         }
-        if (!response.ok || errJson.error) {
-          throw new Error(errJson.error || 'Falha ao refinar o site pela IA.');
+
+        console.error('❌ [Resposta com Erro no Refinamento]:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: textBody,
+        });
+
+        if (!response.ok) {
+          const errMsg = errJson?.error || (textBody.length < 300 && textBody.trim() ? textBody : `Erro no servidor ao refinar (Código HTTP ${response.status}).`);
+          throw new Error(errMsg);
         }
-        rawOutput = errJson.html || '';
+        rawOutput = errJson?.html || textBody;
       } else if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let chunkCount = 0;
 
-        console.log(`[ChatGPT Refinement API] Resposta recebida! Iniciando leitura em tempo real para refinamento da aba ${tabId}...`);
+        console.log(`🚀 [ChatGPT Refinement API] Conexão estabelecida! Refinando e transmitindo em tempo real para a aba ${tabId}...`);
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          rawOutput += chunk;
-          chunkCount++;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            rawOutput += chunk;
+            chunkCount++;
 
-          console.log(`[ChatGPT Refinement Chunk #${chunkCount}]:`, chunk);
-          console.log(`[ChatGPT Refinement Acumulado (${rawOutput.length} caracteres)]:`, rawOutput);
+            console.log(`📦 [Refinement Chunk #${chunkCount}]:`, chunk);
+            console.log(`📄 [Refinement HTML Acumulado (${rawOutput.length} chars)]`);
 
-          const liveHtml = cleanHtmlOutput(rawOutput);
+            const liveHtml = cleanHtmlOutput(rawOutput);
 
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.id === tabId
-                ? {
-                    ...t,
-                    htmlCode: liveHtml,
-                    isLoading: false,
-                    isStreaming: true,
-                    loadingStatus: `Refinando em tempo real (${rawOutput.length} caracteres)...`,
-                  }
-                : t
-            )
-          );
+            setTabs((prev) =>
+              prev.map((t) =>
+                t.id === tabId
+                  ? {
+                      ...t,
+                      htmlCode: liveHtml,
+                      isLoading: false,
+                      isStreaming: true,
+                      loadingStatus: `Refinando em tempo real (${rawOutput.length} caracteres)...`,
+                    }
+                  : t
+              )
+            );
+          }
+          console.log(`✅ [ChatGPT Refinement Stream Concluído] Chunks: ${chunkCount}, Total: ${rawOutput.length} caracteres.`);
+        } catch (streamReadErr: any) {
+          console.error('⚠️ [Erro na Leitura do Refinamento]:', streamReadErr);
+          if (!rawOutput) {
+            throw streamReadErr;
+          }
         }
-        console.log(`[ChatGPT Refinement] Stream finalizado! Total de chunks: ${chunkCount}, tamanho do HTML: ${rawOutput.length} caracteres.`);
       } else {
         rawOutput = await response.text();
+        console.log(`📄 [Refinement Texto Direto]:\n`, rawOutput);
       }
 
       const updatedHtml = cleanHtmlOutput(rawOutput);

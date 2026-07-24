@@ -138,9 +138,15 @@ app.post("/api/generate-site", async (req, res) => {
 
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("X-Content-Type-Options", "nosniff");
+      if (typeof (res as any).flushHeaders === "function") {
+        (res as any).flushHeaders();
+      }
 
       for await (const chunk of result.textStream) {
         res.write(chunk);
+        if (typeof (res as any).flush === "function") {
+          (res as any).flush();
+        }
       }
       return res.end();
     } catch (streamErr: any) {
@@ -207,9 +213,15 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
 
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("X-Content-Type-Options", "nosniff");
+      if (typeof (res as any).flushHeaders === "function") {
+        (res as any).flushHeaders();
+      }
 
       for await (const chunk of result.textStream) {
         res.write(chunk);
+        if (typeof (res as any).flush === "function") {
+          (res as any).flush();
+        }
       }
       return res.end();
     } catch (streamErr: any) {
