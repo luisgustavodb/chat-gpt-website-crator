@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { createOpenAIOAuth } from "@openai-oauth/ai-sdk";
 import { openaiCredentials } from "@openai-oauth/react/server";
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -118,35 +118,49 @@ app.post("/api/generate-site", async (req, res) => {
 
     const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
 
+    let openai;
     try {
       const webHeaders = getWebHeaders(req);
       const credentials = openaiCredentials(webHeaders);
-      const openai = createOpenAIOAuth(credentials);
-      const result = await generateText({
-        model: openai(selectedModel),
-        prompt: fullUserPrompt,
-      });
-
-      const rawOutput = result.text || "";
-      const htmlCode = cleanHtmlOutput(rawOutput);
-
-      res.json({
-        success: true,
-        query,
-        html: htmlCode,
-        generatedAt: new Date().toISOString(),
-      });
+      openai = createOpenAIOAuth(credentials);
     } catch (chatGptErr: any) {
       console.error("Erro no ChatGPT / OpenAI OAuth:", chatGptErr);
       return res.status(401).json({
         error: "Autenticação do ChatGPT necessária. Por favor, conecte sua conta do ChatGPT clicando no botão 'Sign in with ChatGPT'. " + (chatGptErr?.message || ""),
       });
     }
+
+    try {
+      const result = streamText({
+        model: openai(selectedModel),
+        prompt: fullUserPrompt,
+      });
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+
+      for await (const chunk of result.textStream) {
+        res.write(chunk);
+      }
+      return res.end();
+    } catch (streamErr: any) {
+      console.error("Erro no streaming do ChatGPT:", streamErr);
+      if (!res.headersSent) {
+        return res.status(401).json({
+          error: "Erro na geração do ChatGPT: " + (streamErr?.message || ""),
+        });
+      }
+      return res.end();
+    }
   } catch (error: any) {
     console.error("Erro ao gerar site:", error);
-    res.status(500).json({
-      error: error?.message || "Ocorreu um erro interno ao gerar o site.",
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: error?.message || "Ocorreu um erro interno ao gerar o site.",
+      });
+    } else {
+      res.end();
+    }
   }
 });
 
@@ -173,34 +187,49 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
 
     const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
 
+    let openai;
     try {
       const webHeaders = getWebHeaders(req);
       const credentials = openaiCredentials(webHeaders);
-      const openai = createOpenAIOAuth(credentials);
-      const result = await generateText({
-        model: openai(selectedModel),
-        prompt: fullUserPrompt,
-      });
-
-      const rawOutput = result.text || "";
-      const htmlCode = cleanHtmlOutput(rawOutput);
-
-      res.json({
-        success: true,
-        html: htmlCode,
-        updatedAt: new Date().toISOString(),
-      });
+      openai = createOpenAIOAuth(credentials);
     } catch (chatGptErr: any) {
       console.error("Erro no ChatGPT / OpenAI OAuth no refinamento:", chatGptErr);
       return res.status(401).json({
         error: "Autenticação do ChatGPT necessária. Por favor, conecte sua conta do ChatGPT clicando no botão 'Sign in with ChatGPT'. " + (chatGptErr?.message || ""),
       });
     }
+
+    try {
+      const result = streamText({
+        model: openai(selectedModel),
+        prompt: fullUserPrompt,
+      });
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+
+      for await (const chunk of result.textStream) {
+        res.write(chunk);
+      }
+      return res.end();
+    } catch (streamErr: any) {
+      console.error("Erro no streaming do ChatGPT ao refinar:", streamErr);
+      if (!res.headersSent) {
+        return res.status(401).json({
+          error: "Erro no refinamento do ChatGPT: " + (streamErr?.message || ""),
+        });
+      }
+      return res.end();
+    }
   } catch (error: any) {
     console.error("Erro ao refinamento do site:", error);
-    res.status(500).json({
-      error: error?.message || "Ocorreu um erro ao aplicar as alterações no site.",
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: error?.message || "Ocorreu um erro ao aplicar as alterações no site.",
+      });
+    } else {
+      res.end();
+    }
   }
 });
 

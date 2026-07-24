@@ -7,6 +7,49 @@ import { ChatGPTAuthModal } from './components/ChatGPTAuthModal';
 import { SAMPLE_NOVA_AI_HTML } from './data/sampleSites';
 import { openaiAuthHeaders } from '@openai-oauth/react';
 
+function cleanHtmlOutput(raw: string): string {
+  if (!raw) return '';
+  let html = raw.trim();
+
+  const codeBlockMatch = html.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    html = codeBlockMatch[1].trim();
+  }
+
+  const doctypeIndex = html.search(/<!DOCTYPE\s+html/i);
+  if (doctypeIndex !== -1) {
+    html = html.substring(doctypeIndex);
+  } else {
+    const htmlTagIndex = html.search(/<html/i);
+    if (htmlTagIndex !== -1) {
+      html = html.substring(htmlTagIndex);
+    }
+  }
+
+  const closeHtmlIndex = html.search(/<\/html>/i);
+  if (closeHtmlIndex !== -1) {
+    html = html.substring(0, closeHtmlIndex + 7);
+  }
+
+  if (!html.toLowerCase().includes('<html') && !html.toLowerCase().includes('<!doctype html')) {
+    html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <title>Site Gerado por IA</title>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+  ${html}
+</body>
+</html>`;
+  }
+
+  return html;
+}
+
 export default function App() {
   // Toggle for OpenAI OAuth / ChatGPT Mode & Auth Modal
   const [isOpenAiAuthEnabled, setIsOpenAiAuthEnabled] = useState<boolean>(true);
@@ -192,21 +235,37 @@ export default function App() {
 
       clearInterval(interval);
 
-      const contentType = response.headers.get('content-type');
-      let data: any = {};
+      const contentType = response.headers.get('content-type') || '';
+      let rawOutput = '';
 
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+      if (!response.ok || contentType.includes('application/json')) {
+        let errJson: any = {};
+        try {
+          errJson = await response.json();
+        } catch (_) {
+          const textErr = await response.text();
+          throw new Error(textErr || 'Erro ao conectar à API de geração.');
+        }
+        if (!response.ok || errJson.error) {
+          throw new Error(errJson.error || 'Falha ao gerar o site pela IA.');
+        }
+        rawOutput = errJson.html || '';
+      } else if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawOutput += decoder.decode(value, { stream: true });
+        }
       } else {
-        const rawText = await response.text();
-        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
+        rawOutput = await response.text();
       }
 
-      if (!response.ok || !data.html) {
-        throw new Error(data.error || 'Falha ao gerar o site pela IA.');
+      const generatedHtml = cleanHtmlOutput(rawOutput);
+      if (!generatedHtml) {
+        throw new Error('Nenhum código HTML válido foi gerado.');
       }
-
-      const generatedHtml = data.html;
 
       // Extract a clean title from HTML <title> tag if available
       let siteTitle = query;
@@ -341,18 +400,36 @@ export default function App() {
         }),
       });
 
-      const contentType = response.headers.get('content-type');
-      let data: any = {};
+      const contentType = response.headers.get('content-type') || '';
+      let rawOutput = '';
 
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+      if (!response.ok || contentType.includes('application/json')) {
+        let errJson: any = {};
+        try {
+          errJson = await response.json();
+        } catch (_) {
+          const textErr = await response.text();
+          throw new Error(textErr || 'Erro ao conectar à API de refinamento.');
+        }
+        if (!response.ok || errJson.error) {
+          throw new Error(errJson.error || 'Falha ao refinar o site pela IA.');
+        }
+        rawOutput = errJson.html || '';
+      } else if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          rawOutput += decoder.decode(value, { stream: true });
+        }
       } else {
-        const rawText = await response.text();
-        throw new Error(rawText || 'Resposta do servidor indisponível em formato JSON.');
+        rawOutput = await response.text();
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Falha ao refinar o site.');
+      const updatedHtml = cleanHtmlOutput(rawOutput);
+      if (!updatedHtml) {
+        throw new Error('Nenhum código HTML válido foi gerado no refinamento.');
       }
 
       setTabs((prev) =>
@@ -360,7 +437,7 @@ export default function App() {
           t.id === tabId
             ? {
                 ...t,
-                htmlCode: data.html,
+                htmlCode: updatedHtml,
                 isLoading: false,
                 loadingProgress: 100,
                 loadingStatus: 'Refinado com sucesso',
