@@ -7,6 +7,49 @@ import { ChatGPTAuthModal } from './components/ChatGPTAuthModal';
 import { SAMPLE_NOVA_AI_HTML } from './data/sampleSites';
 import { openaiAuthHeaders } from '@openai-oauth/react';
 
+const CLICK_INTERCEPTOR_SCRIPT = `
+<script id="ai-site-click-interceptor">
+(function() {
+  if (window.__aiClickInterceptorAttached) return;
+  window.__aiClickInterceptorAttached = true;
+
+  document.addEventListener('click', function(e) {
+    var el = e.target.closest('button, a, [role="button"], input[type="submit"], input[type="button"], .cursor-pointer');
+    if (!el) return;
+
+    var href = el.getAttribute('href') || '';
+
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      if (!href.includes('example.com') && !href.includes('#')) {
+        return;
+      }
+    }
+
+    e.preventDefault();
+
+    var text = (el.innerText || el.textContent || el.getAttribute('title') || el.getAttribute('aria-label') || href || '').trim();
+    if (!text) {
+      var icon = el.querySelector('i, svg');
+      if (icon) {
+        text = icon.getAttribute('class') || 'Icone';
+      }
+    }
+    if (!text) text = 'Aba';
+
+    try {
+      window.parent.postMessage({
+        type: 'SITE_BUTTON_CLICK',
+        label: text.substring(0, 80),
+        href: href
+      }, '*');
+    } catch(err) {
+      console.error('Erro ao enviar mensagem de clique:', err);
+    }
+  }, true);
+})();
+</script>
+`;
+
 function cleanHtmlOutput(raw: string): string {
   if (!raw) return '';
   let html = raw.trim();
@@ -49,6 +92,17 @@ function cleanHtmlOutput(raw: string): string {
   ${html}
 </body>
 </html>`;
+  }
+
+  // Inject click interceptor script into generated page
+  if (!html.includes('id="ai-site-click-interceptor"')) {
+    if (html.toLowerCase().includes('</body>')) {
+      html = html.replace(/<\/body>/i, `${CLICK_INTERCEPTOR_SCRIPT}\n</body>`);
+    } else if (html.toLowerCase().includes('</html>')) {
+      html = html.replace(/<\/html>/i, `${CLICK_INTERCEPTOR_SCRIPT}\n</html>`);
+    } else {
+      html += CLICK_INTERCEPTOR_SCRIPT;
+    }
   }
 
   return html;
@@ -336,6 +390,8 @@ export default function App() {
         siteTitle = titleMatch[1].trim();
       }
 
+      const initialCache = { home: generatedHtml };
+
       // Update tab with result
       setTabs((prev) =>
         prev.map((t) => {
@@ -362,6 +418,8 @@ export default function App() {
             loadingStatus: 'Pronto',
             history: updatedHistory,
             historyIndex: updatedHistory.length - 1,
+            pageCache: initialCache,
+            currentCacheKey: 'home',
           };
         })
       );
@@ -436,6 +494,207 @@ export default function App() {
       );
     }
   };
+
+  // Sub-Page Navigation via Click on Generated Site Buttons
+  const handleSubPageNavigate = async (tabId: string, label: string, href: string) => {
+    const currentTab = tabs.find((t) => t.id === tabId);
+    if (!currentTab || !currentTab.htmlCode || currentTab.isLoading || currentTab.isStreaming) return;
+
+    // Normalize label into cache key
+    const rawKey = (label || href || 'home')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const isHome = rawKey === 'home' || rawKey === 'inicio' || rawKey === 'logo' || rawKey === 'pagina-inicial' || rawKey === 'main' || href === '/' || href === '#home';
+    const pageKey = isHome ? 'home' : (rawKey || 'aba');
+
+    const cache = currentTab.pageCache || {};
+
+    // 1. IF PAGE IS ALREADY SAVED IN CACHE:
+    if (cache[pageKey]) {
+      console.log(`⚡ [Cache Hit] Carregando aba "${pageKey}" diretamente do cache sem re-gerar!`);
+      const cachedHtml = cache[pageKey];
+
+      const pageUrl = `${currentTab.url || 'https://site.app'}/${pageKey}`;
+      const newHistoryStep = {
+        url: pageUrl,
+        title: `${currentTab.title} - ${label}`,
+        html: cachedHtml,
+        prompt: `Aba: ${label}`,
+      };
+
+      const updatedHistory = [...currentTab.history.slice(0, currentTab.historyIndex + 1), newHistoryStep];
+
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                htmlCode: cachedHtml,
+                currentCacheKey: pageKey,
+                history: updatedHistory,
+                historyIndex: updatedHistory.length - 1,
+                loadingStatus: `Aba "${label}" carregada do cache!`,
+              }
+            : t
+        )
+      );
+      return;
+    }
+
+    // 2. IF NOT IN CACHE: CALL AI TO GENERATE THIS SUB-PAGE BASED ON CURRENT SITE CODE
+    console.log(`🤖 [Nova Aba] Gerando a aba "${label}" via IA com base no site atual...`);
+
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tabId
+          ? {
+              ...t,
+              isLoading: true,
+              loadingProgress: 25,
+              loadingStatus: `Gerando a aba "${label}" com base na estrutura e tema do site atual...`,
+            }
+          : t
+      )
+    );
+
+    const subPagePrompt = `O usuário clicou no botão/link/aba "${label}" (link: "${href}") no site atual.
+Gere a página/aba COMPLETA correspondente para "${label}" ("${pageKey}"), mantendo RIGOROSAMENTE:
+1. O mesmo conceito criativo, estilo visual, paleta de cores e atmosfera do site original.
+2. O mesmo cabeçalho/header e rodapé/footer com links de navegação.
+3. Conteúdo rico, completo e interativo adaptado especificamente para a aba "${label}".
+4. Adapte todos os textos, cartões, botões e imagens para o tema específico da aba "${label}".`;
+
+    try {
+      let authHeaders = {};
+      try {
+        if (isOpenAiAuthEnabled) {
+          authHeaders = openaiAuthHeaders();
+        }
+      } catch (authErr) {
+        console.warn('OpenAI Auth Headers indisponíveis:', authErr);
+      }
+
+      const response = await fetch('/api/refine-site', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          currentCode: currentTab.htmlCode,
+          refinement: subPagePrompt,
+          model: selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        const textBody = await response.text();
+        let errJson: any = null;
+        try { errJson = JSON.parse(textBody); } catch (_) {}
+        throw new Error(errJson?.error || `Erro HTTP ${response.status} ao gerar a aba "${label}".`);
+      }
+
+      let rawOutput = '';
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          rawOutput += chunk;
+
+          const liveHtml = cleanHtmlOutput(rawOutput);
+
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === tabId
+                ? {
+                    ...t,
+                    htmlCode: liveHtml,
+                    isLoading: false,
+                    isStreaming: true,
+                    loadingStatus: `Gerando aba "${label}" em tempo real (${rawOutput.length} chars)...`,
+                  }
+                : t
+            )
+          );
+        }
+      } else {
+        rawOutput = await response.text();
+      }
+
+      const generatedSubHtml = cleanHtmlOutput(rawOutput);
+      if (!generatedSubHtml) {
+        throw new Error(`Código inválido retornado para a aba "${label}".`);
+      }
+
+      const updatedCache = { ...cache, [pageKey]: generatedSubHtml };
+      const pageUrl = `${currentTab.url || 'https://site.app'}/${pageKey}`;
+
+      const newHistoryStep = {
+        url: pageUrl,
+        title: `${currentTab.title} - ${label}`,
+        html: generatedSubHtml,
+        prompt: `Aba: ${label}`,
+      };
+
+      const updatedHistory = [...currentTab.history.slice(0, currentTab.historyIndex + 1), newHistoryStep];
+
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                htmlCode: generatedSubHtml,
+                isLoading: false,
+                isStreaming: false,
+                pageCache: updatedCache,
+                currentCacheKey: pageKey,
+                history: updatedHistory,
+                historyIndex: updatedHistory.length - 1,
+                loadingStatus: `Aba "${label}" gerada e salva no cache!`,
+              }
+            : t
+        )
+      );
+    } catch (err: any) {
+      console.error(`❌ Erro ao gerar a aba "${label}":`, err);
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                isLoading: false,
+                isStreaming: false,
+                loadingStatus: `Erro ao gerar aba "${label}": ${err.message}`,
+              }
+            : t
+        )
+      );
+    }
+  };
+
+  // Listen for button/link click messages from generated site iframe
+  useEffect(() => {
+    const handleIframeMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'SITE_BUTTON_CLICK') {
+        const { label, href } = event.data;
+        if (label) {
+          console.log(`👆 [Clique Detectado no Site]: Label="${label}", Href="${href}"`);
+          handleSubPageNavigate(activeTabId, label, href);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleIframeMessage);
+    return () => window.removeEventListener('message', handleIframeMessage);
+  }, [activeTabId, tabs, isOpenAiAuthEnabled, selectedModel]);
 
   // Refine Site Handler
   const handleRefineSite = async (tabId: string, refinementPrompt: string) => {

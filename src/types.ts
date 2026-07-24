@@ -24,6 +24,8 @@ export interface Tab {
   historyIndex: number;
   isBookmarked: boolean;
   favIcon?: string;
+  pageCache?: Record<string, string>;
+  currentCacheKey?: string;
 }
 
 export interface Preset {
