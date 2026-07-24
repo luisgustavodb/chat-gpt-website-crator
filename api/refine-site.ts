@@ -59,11 +59,15 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { currentCode, refinement } = req.body || {};
+    const { currentCode, refinement, model } = req.body || {};
 
     if (!currentCode || !refinement) {
       return res.status(400).json({ error: 'Código atual e refinamento são obrigatórios.' });
     }
+
+    const selectedModel = ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4-mini'].includes(model)
+      ? model
+      : 'gpt-5.4-mini';
 
     const fullPrompt = `${INSTRUCAO_SISTEMA_REFINAR_SITE}
 
@@ -81,7 +85,7 @@ SOLICITAÇÃO DE ALTERAÇÃO/MELHORIA DO USUÁRIO:
       const openai = createOpenAIOAuth(credentials);
 
       const result = await generateText({
-        model: openai('gpt-5.4-mini'),
+        model: openai(selectedModel),
         prompt: fullPrompt,
       });
 

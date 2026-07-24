@@ -105,12 +105,16 @@ function cleanHtmlOutput(raw: string): string {
 // API endpoint to generate a site EXCLUSIVELY via ChatGPT
 app.post("/api/generate-site", async (req, res) => {
   try {
-    const { prompt, url } = req.body;
+    const { prompt, url, model } = req.body;
     const query = prompt || url;
 
     if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({ error: "O parâmetro de busca ou prompt é obrigatório." });
     }
+
+    const selectedModel = ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"].includes(model)
+      ? model
+      : "gpt-5.4-mini";
 
     const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO DO USUÁRIO:\nGere um site completo, moderno e funcional em HTML5 para: "${query}". Crie uma experiência rica, interativa com JavaScript funcional e Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem qualquer texto de explicação.`;
 
@@ -119,7 +123,7 @@ app.post("/api/generate-site", async (req, res) => {
       const credentials = openaiCredentials(webHeaders);
       const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
-        model: openai("gpt-5.4-mini"),
+        model: openai(selectedModel),
         prompt: fullUserPrompt,
       });
 
@@ -149,11 +153,15 @@ app.post("/api/generate-site", async (req, res) => {
 // API endpoint to refine an existing site EXCLUSIVELY via ChatGPT
 app.post("/api/refine-site", async (req, res) => {
   try {
-    const { currentCode, refinement } = req.body;
+    const { currentCode, refinement, model } = req.body;
 
     if (!currentCode || !refinement) {
       return res.status(400).json({ error: "Código atual e refinamento são obrigatórios." });
     }
+
+    const selectedModel = ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"].includes(model)
+      ? model
+      : "gpt-5.4-mini";
 
     const userContent = `CÓDIGO HTML ATUAL:
 \`\`\`html
@@ -170,7 +178,7 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
       const credentials = openaiCredentials(webHeaders);
       const openai = createOpenAIOAuth(credentials);
       const result = await generateText({
-        model: openai("gpt-5.4-mini"),
+        model: openai(selectedModel),
         prompt: fullUserPrompt,
       });
 

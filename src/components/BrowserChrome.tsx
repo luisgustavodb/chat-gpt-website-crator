@@ -42,6 +42,8 @@ interface BrowserChromeProps {
   onDownloadHtml: (tab: Tab) => void;
   isOpenAiAuthEnabled?: boolean;
   onToggleOpenAiAuth?: () => void;
+  selectedModel?: string;
+  onChangeModel?: (model: string) => void;
 }
 
 export const BrowserChrome: React.FC<BrowserChromeProps> = ({
@@ -60,6 +62,8 @@ export const BrowserChrome: React.FC<BrowserChromeProps> = ({
   onDownloadHtml,
   isOpenAiAuthEnabled = false,
   onToggleOpenAiAuth,
+  selectedModel = 'gpt-5.4-mini',
+  onChangeModel,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const [addressInput, setAddressInput] = useState(activeTab?.url || '');
@@ -168,6 +172,21 @@ export const BrowserChrome: React.FC<BrowserChromeProps> = ({
 
         {/* Top Right Extra Tools */}
         <div className="flex items-center gap-2 pl-2 pb-1">
+          {/* Model Selector Dropdown */}
+          {onChangeModel && (
+            <select
+              value={selectedModel}
+              onChange={(e) => onChangeModel(e.target.value)}
+              className="bg-white text-slate-800 text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs cursor-pointer hover:bg-slate-50 transition-colors"
+              title="Selecione o modelo do ChatGPT"
+            >
+              <option value="gpt-5.4-mini">gpt-5.4-mini (Recomendado/Rápido)</option>
+              <option value="gpt-5.5">gpt-5.5</option>
+              <option value="gpt-5.6-terra">gpt-5.6-terra</option>
+              <option value="gpt-5.6-luna">gpt-5.6-luna</option>
+            </select>
+          )}
+
           {/* OpenAI OAuth / ChatGPT Badge */}
           {onToggleOpenAiAuth && (
             <button
@@ -181,7 +200,7 @@ export const BrowserChrome: React.FC<BrowserChromeProps> = ({
             >
               <Sparkles className={`w-3.5 h-3.5 ${isOpenAiAuthEnabled ? 'text-emerald-600' : 'text-slate-500'}`} />
               <span className="hidden sm:inline">
-                {isOpenAiAuthEnabled ? 'ChatGPT Mode' : 'ChatGPT Auth'}
+                {isOpenAiAuthEnabled ? 'ChatGPT Conectado' : 'Conectar ChatGPT'}
               </span>
             </button>
           )}

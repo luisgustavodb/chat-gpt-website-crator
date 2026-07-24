@@ -76,12 +76,16 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { prompt, url } = req.body || {};
+    const { prompt, url, model } = req.body || {};
     const query = prompt || url;
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return res.status(400).json({ error: 'O parâmetro de busca ou prompt é obrigatório.' });
     }
+
+    const selectedModel = ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4-mini'].includes(model)
+      ? model
+      : 'gpt-5.4-mini';
 
     // Coloca as instruções sempre ANTES na mensagem do prompt (sem usar campo de sistema)
     const fullPrompt = `${INSTRUCAO_SISTEMA_CRIAR_SITE}
@@ -95,7 +99,7 @@ Gere um site completo, moderno e totalmente funcional em HTML5/Tailwind CSS para
       const openai = createOpenAIOAuth(credentials);
 
       const result = await generateText({
-        model: openai('gpt-5.4-mini'),
+        model: openai(selectedModel),
         prompt: fullPrompt,
       });
 

@@ -11,6 +11,7 @@ export default function App() {
   // Toggle for OpenAI OAuth / ChatGPT Mode & Auth Modal
   const [isOpenAiAuthEnabled, setIsOpenAiAuthEnabled] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-5.4-mini');
 
   // Initialize state with default tab or blank tab
   const [tabs, setTabs] = useState<Tab[]>([
@@ -185,6 +186,7 @@ export default function App() {
           prompt: query,
           url: formattedUrl,
           useChatGPT: isOpenAiAuthEnabled,
+          model: selectedModel,
         }),
       });
 
@@ -335,6 +337,7 @@ export default function App() {
           currentCode: currentTab.htmlCode,
           refinement: refinementPrompt,
           useChatGPT: isOpenAiAuthEnabled,
+          model: selectedModel,
         }),
       });
 
@@ -532,6 +535,8 @@ export default function App() {
         onDownloadHtml={handleDownloadHtml}
         isOpenAiAuthEnabled={isOpenAiAuthEnabled}
         onToggleOpenAiAuth={() => setIsAuthModalOpen(true)}
+        selectedModel={selectedModel}
+        onChangeModel={setSelectedModel}
       />
 
       {/* Browser Main Viewport */}
