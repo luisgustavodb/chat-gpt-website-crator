@@ -136,14 +136,15 @@ app.post("/api/generate-site", async (req, res) => {
     if (useChatGPT) {
       try {
         const openai = createOpenAIOAuth(req.headers as any);
+        const fullUserPrompt = `${GENERATE_SITE_SYSTEM_PROMPT}\n\nINSTRUÇÕES DA SOLICITAÇÃO:\nGere um site completo e funcional em HTML5 para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS. Retorne ESTRITAMENTE O CÓDIGO HTML sem saudações ou texto antes/depois.`;
+        
         const result = await generateText({
           model: openai("gpt-4o"),
-          system: GENERATE_SITE_SYSTEM_PROMPT,
-          prompt: `Gere um site completo e funcional para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS.`,
+          prompt: fullUserPrompt,
         });
         rawOutput = result.text || "";
       } catch (oauthErr) {
-        console.warn("OAuth ChatGPT não autenticado no servidor, usando Gemini como fallback:", oauthErr);
+        console.warn("OAuth ChatGPT indisponível ou não autenticado, usando Gemini 3.6 Flash como fallback:", oauthErr);
       }
     }
 
@@ -152,7 +153,7 @@ app.post("/api/generate-site", async (req, res) => {
       const ai = getGeminiClient();
       const response = await ai.models.generateContent({
         model: "gemini-3.6-flash",
-        contents: `Gere um site completo e funcional para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS.`,
+        contents: `${GENERATE_SITE_SYSTEM_PROMPT}\n\nSOLICITAÇÃO DO USUÁRIO:\nGere um site completo e funcional para o seguinte pedido ou URL: "${query}". Crie uma experiência rica, interativa, com JavaScript funcional e design moderno em Tailwind CSS. Retorne APENAS o código HTML.`,
         config: {
           systemInstruction: GENERATE_SITE_SYSTEM_PROMPT,
           temperature: 0.7,
@@ -199,10 +200,10 @@ SOLICITAÇÃO DE ALTERAÇÃO DO USUÁRIO:
     if (useChatGPT) {
       try {
         const openai = createOpenAIOAuth(req.headers as any);
+        const fullUserPrompt = `${REFINE_SITE_SYSTEM_PROMPT}\n\n${userContent}`;
         const result = await generateText({
           model: openai("gpt-4o"),
-          system: REFINE_SITE_SYSTEM_PROMPT,
-          prompt: userContent,
+          prompt: fullUserPrompt,
         });
         rawOutput = result.text || "";
       } catch (oauthErr) {
